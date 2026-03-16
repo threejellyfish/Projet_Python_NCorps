@@ -42,12 +42,34 @@ class Corps:
         print(f"Vitesse: {self.speed}")
         print(f"Position: {self.position}")
         print(f"Couleur: {self.color}")
+    
+    def belongs_to(pos, grid):
+
+        x_coor = pos[0]
+        y_coor = pos[1]
+
+        for i in range(0,20) :
+            inf = -3 + i*( 3 + 3)/6
+            sup = -3 + (i+1)*( 3 + 3)/6
+            if x_coor >= inf and x_coor <= sup :
+                ix = i
+            if y_coor >= inf and y_coor <= sup :
+                iy = i
+        grid_index = (ix, iy)
+        return grid_index
+
+    #nstars = 100
+    #Grid_pos = np.zeros((nstars,2), dtype=tuple)
+    #for i in range(nstars) :
+    #    Grid_pos[i] = belongs_to(star.pos, grid)
+
 
 
 class NCorps: 
     def __init__(self, collection=None):
         self.collection = collection if collection is not None else []
         self.len = len(self.collection)
+        self.grid_pos = np.zeros((self.len, 2))
     
     def add(self, corps): 
         self.collection.append(corps)
@@ -74,16 +96,40 @@ class NCorps:
         
         return accelerations
     
+    def calculate_accelerations2(self):
+        "Grid"
+        accelerations = np.zeros((self.len, 3), dtype=np.float64)
+        for i in range(self.len):
+            for j in range(self.len):
+                if i != j:
+                    if 1/2* np.linalg.norm(self.collection[i].position - self.get_gravity_center(self.grid_pos[j,0], self.grid_pos[j,1])) > 0.5 :
+                        r_vec = self.collection[j].position - self.get_gravity_center(self.grid_pos[j,0], self.grid_pos[j,1])
+                        distance = np.linalg.norm(r_vec)
+                    else :
+                        # Vecteur de i à j
+                        r_vec = self.collection[j].position - self.collection[i].position
+                        distance = np.linalg.norm(r_vec)
+                    
+                    if distance > 0:  # Éviter division par zéro
+                        # Force gravitationnelle: F = G * m_i * m_j / r²
+                        # Accélération: a = F / m_i = G * m_j / r² * (r_vec / r)
+                        acceleration_magnitude = G * self.collection[j].mass / (distance**2)
+                        acceleration_direction = r_vec / distance
+                        accelerations[i] += acceleration_magnitude * acceleration_direction
+        
+        return accelerations 
+
+    
     def update(self, dt):
         """Met à jour tous les corps avec leurs accélérations"""
-        accelerations = self.calculate_accelerations()
+        accelerations = self.calculate_accelerations2()
         
         for i, corps in enumerate(self.collection):
             corps.update(accelerations[i], dt)
             
     def update2(self, dt):
         "Verlet"
-        a = self.calculate_accelerations()
+        a = self.calculate_accelerations2()
         for i in range(self.len):
             position = self.collection[i].position + self.collection[i].speed*dt + 0.5* a*dt*dt
             self.collection[i].update_position(position)
@@ -92,6 +138,15 @@ class NCorps:
 
             speed = self.collection[i].speed + 0.5*(a + a_new)*dt
             self.collecion[i].update_speed(speed)
+
+    def get_gravity_center(self,coord_x,coord_y): 
+        loc_pos = []
+        for i in range(self.len):
+            if self.grid_pos[i,0] == coord_x and self.grid_pos[i,1] == coord_y :
+                loc_pos.append(self.collection[i].position)
+        loc_pos = np.array(loc_pos)
+        return np.mean(loc_pos) if len(loc_pos) > 0 else 0.0
+
 
     
     def get_points(self):
@@ -204,25 +259,29 @@ def main():
 
     bounds = ((-max_pos[0], max_pos[0]))
 
-    #grid = np.linspace(-3,3, 1000)
+    grid = np.linspace(-3,3, 1000)
 
-    grid = np.meshgrid(np.linspace(-3,3,20), np.linspace(-3,3,20))
-    print(grid)
+    #grid = np.meshgrid(np.linspace(-3,3,20), np.linspace(-3,3,20))
+    #print(grid)
 
-    def belongs_to(pos, grid):
-        for p in points :
-            x_coor = point[0]
-            y_coor = point[1]
+    #def belongs_to(pos, grid):
+    #    for p in points :
+    #        x_coor = point[0]
+    #        y_coor = point[1]
 
-            for i in range(0,20) :
-                inf = -3 + i*( 3 + 3)/6
-                sup = -3 + (i+1)*( 3 + 3)/6
-                if x_coor >= inf and x_coor <= sup :
-                    ix = i
-                if y_coor >= inf and y_coor <= sup :
-                    iy = i
-        grid_index = (ix, iy)
-        return grid_index
+    #        for i in range(0,20) :
+    #            inf = -3 + i*( 3 + 3)/6
+    #            sup = -3 + (i+1)*( 3 + 3)/6
+    #            if x_coor >= inf and x_coor <= sup :
+    #                ix = i
+    #            if y_coor >= inf and y_coor <= sup :
+    #                iy = i
+    #    grid_index = (ix, iy)
+    #    return grid_index
+
+    #### mis a jour 
+    #for i in range(len) :
+    #    galaxy.grid_pos[i] = belongs_to(star.pos, grid)
 
 
     colors = galaxy.get_colors()

@@ -19,6 +19,11 @@ def belongs_to(pos, grid):
     grid_index = (ix, iy)
     return grid_index
 
+nstars = 100
+Grid_pos = np.zeros((nstars,2), dtype=tuple)
+for i in range(nstars) :
+    Grid_pos[i] = belongs_to(star.pos, grid)
+
 pos = (-2.9, -2)
 
 
