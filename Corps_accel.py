@@ -9,6 +9,7 @@ class Corps:
         self.position = np.array(position, dtype=np.float64)
         self.speed = np.array(speed, dtype=np.float64)
         self._determine_color()  # Déterminer couleur basée sur masse
+        self.grid_pos = self.belongs_to(self.position)
     
     def _determine_color(self):
         """Détermine la couleur basée sur la masse"""
@@ -43,7 +44,7 @@ class Corps:
         print(f"Position: {self.position}")
         print(f"Couleur: {self.color}")
     
-    def belongs_to(pos, grid):
+    def belongs_to(self, pos):
 
         x_coor = pos[0]
         y_coor = pos[1]
@@ -55,7 +56,9 @@ class Corps:
                 ix = i
             if y_coor >= inf and y_coor <= sup :
                 iy = i
-        grid_index = (ix, iy)
+        grid_index = np.zeros((2))
+        grid_index[0] = ix 
+        grid_index[1] = iy
         return grid_index
 
     #nstars = 100
@@ -69,11 +72,12 @@ class NCorps:
     def __init__(self, collection=None):
         self.collection = collection if collection is not None else []
         self.len = len(self.collection)
-        self.grid_pos = np.zeros((self.len, 2))
+        self.grid = np.zeros((self.len, 2), dtype=np.int8)
     
     def add(self, corps): 
         self.collection.append(corps)
         self.len += 1 
+        self.grid = np.concatenate((self.grid, np.expand_dims(corps.grid_pos, axis = 0)))
     
     def calculate_accelerations(self):
         """Calcule l'accélération pour chaque corps due à l'attraction gravitationnelle"""
@@ -102,8 +106,8 @@ class NCorps:
         for i in range(self.len):
             for j in range(self.len):
                 if i != j:
-                    if 1/2* np.linalg.norm(self.collection[i].position - self.get_gravity_center(self.grid_pos[j,0], self.grid_pos[j,1])) > 0.5 :
-                        r_vec = self.collection[j].position - self.get_gravity_center(self.grid_pos[j,0], self.grid_pos[j,1])
+                    if 1/2* np.linalg.norm(self.collection[i].position - self.get_gravity_center(self.grid[j,0], self.grid[j,1])) > 0.5 :
+                        r_vec = self.collection[j].position - self.get_gravity_center(self.grid[j,0], self.grid[j,1])
                         distance = np.linalg.norm(r_vec)
                     else :
                         # Vecteur de i à j
@@ -123,12 +127,14 @@ class NCorps:
     def update(self, dt):
         """Met à jour tous les corps avec leurs accélérations"""
         accelerations = self.calculate_accelerations2()
+        #print("accelerations 1 :", accelerations)
         
         for i, corps in enumerate(self.collection):
             corps.update(accelerations[i], dt)
             
     def update2(self, dt):
         "Verlet"
+        #print("Verlet accelerations :", acceleration)
         a = self.calculate_accelerations2()
         for i in range(self.len):
             position = self.collection[i].position + self.collection[i].speed*dt + 0.5* a*dt*dt
@@ -142,10 +148,10 @@ class NCorps:
     def get_gravity_center(self,coord_x,coord_y): 
         loc_pos = []
         for i in range(self.len):
-            if self.grid_pos[i,0] == coord_x and self.grid_pos[i,1] == coord_y :
+            if self.grid[i,0] == coord_x and self.grid[i,1] == coord_y :
                 loc_pos.append(self.collection[i].position)
         loc_pos = np.array(loc_pos)
-        return np.mean(loc_pos) if len(loc_pos) > 0 else 0.0
+        return np.mean(loc_pos) if np.shape(loc_pos)[0] > 0 else 0.0
 
 
     
@@ -324,7 +330,7 @@ def main():
         print(f"Erreur de visualisation: {e}")
         # Simulation sans visualisation
         for step in range(100):
-            galaxy.update(0.01)
+            galaxy.update(0.001)
             if step % 10 == 0:
                 print(f"Étape {step}")
 
