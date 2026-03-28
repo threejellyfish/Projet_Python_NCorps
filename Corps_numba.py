@@ -97,30 +97,20 @@ class GalaxieNumba:
         else:
             return np.array([250, 150, 100], dtype=np.float32)
         
-    def calculer_accelerations_vectorisees_2(self):
+    def calculer_accelerations_grid(self):
         "Grid"
         accelerations = np.zeros((self.n, 3), dtype=np.float64)
         gravity_centers = self.update_gravity_centers()
 
         for i in range(self.n):
-            #print(" star id :", i)
+            ax = ay = az = 0.0
             for j in range(self.n):
                 if i != j:
-
                     center_j = gravity_centers[int(self.grid_pos[j,0]), int(self.grid_pos[j,1])]
-                    if 1/2* np.linalg.norm(self.positions[i] - center_j) > 0.3 : #diametre = 0.3
 
-                        r_vec = self.positions[i] - center_j
-                    else :
-                        r_vec = self.positions[j] - self.positions[i]
-                    
-            ax = ay = az = 0.0
-            for j in range(n):
-                if i != j:
-                    center_j = gravity_centers[int(self.grid_pos[j,0]), int(self.grid_pos[j,1])]
-                    dcx = center_j[j, 0] - self.positions[i, 0]
-                    dcy = center_j[j, 1] - self.positions[i, 1]
-                    dcz = center_j[j, 2] - self.positions[i, 2]
+                    dcx = center_j[ 0] - self.positions[i, 0]
+                    dcy = center_j[ 1] - self.positions[i, 1]
+                    dcz = center_j[ 2] - self.positions[i, 2]
                     if 1/2* np.sqrt(dcx*dcx + dcy*dcy + dcz*dcz) + 1e-10 > 0.3 : #diametre = 0
                         r = np.sqrt(dcx*dcx + dcy*dcy + dcz*dcz) + 1e-10
                         
@@ -198,9 +188,11 @@ class GalaxieNumba:
             accelerations = self.calculer_accelerations_python()
         elif mode == 'numba_serial':
             accelerations = self.calculer_accelerations_numba_serial()
-        else:  # numba_parallel
+        elif mode == 'numba_parallel':  # numba_parallel
             accelerations = self.calculer_accelerations_numba_parallel()
-        
+        else : #numba_grid
+            accelerations = self.calculer_accelerations_grid()
+
         # Mise à jour (vectorisée)
         self.vitesses += accelerations * dt
         self.positions += self.vitesses * dt + 0.5 * accelerations * dt**2
@@ -224,6 +216,42 @@ class GalaxieNumba:
 # ============================================================
 # FONCTIONS OPTIMISÉES AVEC NUMBA (EN DEHORS DE LA CLASSE)
 # ============================================================
+
+@njit
+def calculer_accelerations_grid(n, positions, masses, grid_pos, gravity_centers):
+    "Grid"
+    accelerations = np.zeros((n, 3), dtype=np.float64)
+    gravity_centers = update_gravity_centers()
+
+    for i in range(n):
+        ax = ay = az = 0.0
+        for j in range(n):
+            if i != j:
+                center_j = gravity_centers[int(grid_pos[j,0]), int(grid_pos[j,1])]
+                dcx = center_j[j, 0] - positions[i, 0]
+                dcy = center_j[j, 1] - positions[i, 1]
+                dcz = center_j[j, 2] - positions[i, 2]
+                if 1/2* np.sqrt(dcx*dcx + dcy*dcy + dcz*dcz) + 1e-10 > 0.3 : #diametre = 0
+                    r = np.sqrt(dcx*dcx + dcy*dcy + dcz*dcz) + 1e-10
+                    
+                else :
+                    dx = positions[j, 0] - positions[i, 0]
+                    dy = positions[j, 1] - positions[i, 1]
+                    dz = positions[j, 2] - positions[i, 2]
+                
+                    r = np.sqrt(dx*dx + dy*dy + dz*dz) + 1e-10
+                
+                facteur = G * masses[j] / (r * r * r)
+                
+                ax += facteur * dx
+                ay += facteur * dy
+                az += facteur * dz
+        
+        accelerations[i, 0] = ax
+        accelerations[i, 1] = ay
+        accelerations[i, 2] = az
+    
+    return accelerations 
 
 @njit  # Compilation JIT sans parallélisation
 def _calcul_accelerations_numba_serial(positions, masses, G, n):
@@ -256,50 +284,6 @@ def _calcul_accelerations_numba_serial(positions, masses, G, n):
     
     return accelerations
 
-def _calculer_accelerations_numba_2(n_corps, positions, masses, grid_pos, gravity_centers):
-        "Grid"
-        accelerations = np.zeros((n_corps, 3), dtype=np.float64)
-        #self.gravity_centers = np.ones((20,20,3), dtype=np.int16)
-        gravity_centers = self.update_gravity_centers()
-        #print("self.grid :", self.grid)
-        #print("self.gravity_centers :", self.gravity_centers[6:11, 6:12,:])
-        for i in range(n_corps):
-            #print(" star id :", i)
-            for j in range(n_corps):
-                if i != j:
-                    #print("self.grid[j,0] :", self.grid[j,0])
-                    #print("self.grid[j,1] :", self.grid[j,1])
-                    #print("j", j)
-                    center_j = gravity_centers[int(grid_pos[j,0]), int(grid_pos[j,1])]
-                    if 1/2* np.linalg.norm(positions[i] - center_j) > 0.3 : #diametre = 0.3
-                        #print("center_ij :", center_ij)
-                        r_vec = positions[i] - center_j
-                        #print("r_vec :", r_vec)
-                    else :
-                        r_vec = positions[j] - positions[i]
-                    
-                    # parallel=True + prange = parallélisation automatique
-        for i in prange(n):
-            ax = ay = az = 0.0
-            for j in range(n):
-                if i != j:
-                    dx = positions[j, 0] - positions[i, 0]
-                    dy = positions[j, 1] - positions[i, 1]
-                    dz = positions[j, 2] - positions[i, 2]
-                    
-                    r = np.sqrt(dx*dx + dy*dy + dz*dz) + 1e-10
-                    
-                    facteur = G * masses[j] / (r * r * r)
-                    
-                    ax += facteur * dx
-                    ay += facteur * dy
-                    az += facteur * dz
-            
-            accelerations[i, 0] = ax
-            accelerations[i, 1] = ay
-            accelerations[i, 2] = az
-        
-        return accelerations 
 
 
 @njit(parallel=True)  # Compilation avec parallélisation
@@ -333,6 +317,22 @@ def _calcul_accelerations_numba_parallel(positions, masses, G, n):
     
     return accelerations
 
+def update_gravity_centers(gravity_centers):
+        for i in range(20):
+            for j in range(20):
+                gravity_centers[i,j] = compute_gravity_center(i,j)
+        return gravity_centers
+
+def compute_gravity_center(n,position, grid_pos, coord_x,coord_y): 
+
+        loc_pos = []
+        #print("grid_pos :", grid_pos.shape)
+        for i in range(n):
+            if int(grid_pos[i,0]) == coord_x and int(grid_pos[i,1]) == coord_y :
+
+                loc_pos.append(position[i])
+        loc_pos = np.array(loc_pos)
+        return np.mean(loc_pos, axis=0) if np.shape(loc_pos)[0] > 0 else np.zeros((3,))
 
 # ============================================================
 # FONCTIONS DE TEST ET BENCHMARK
@@ -391,6 +391,17 @@ def benchmark_numba(n_etoiles=100, n_iterations=20, dt=0.01):
         galaxie.update(dt, mode='numba_parallel')
     t_numba_parallel = time.time() - start
     print(f"   Temps: {t_numba_parallel:.4f} s")
+
+    # 4. Version Numba grid
+    print("\n Version Numba (grid)...")
+    # Première exécution (compilation)
+    galaxie.update(dt, mode='numba_grid')
+    
+    start = time.time()
+    for _ in range(n_iterations):
+        galaxie.update(dt, mode='numba_grid')
+    t_numba_grid = time.time() - start
+    print(f"   Temps: {t_numba_grid:.4f} s")
     
     # Calcul des accélérations
     print("\n" + "-"*50)
@@ -454,6 +465,13 @@ def benchmark_multi_taille():
         start = time.time()
         for _ in range(10):
             galaxie.update(0.01, mode='numba_parallel')
+        t_np = time.time() - start
+
+        # Benchmark Numba grid
+        galaxie.update(0.01, mode='numba_grid')  # Warmup
+        start = time.time()
+        for _ in range(10):
+            galaxie.update(0.01, mode='numba_grid')
         t_np = time.time() - start
         
         accel = t_py / t_np
