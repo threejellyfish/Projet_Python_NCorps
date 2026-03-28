@@ -29,11 +29,36 @@ def creer_galaxie(n_corps):
     vitesses = np.zeros((n_corps, 3), dtype=np.float64)
     masses = np.zeros(n_corps, dtype=np.float64)
     couleurs = np.zeros((n_corps, 3), dtype=np.float32)  # RGB 0-255
+    grid_pos = np.zeros((n_corps, 2), dtype=np.int8)
+    gravity_centers = np.zeros((20,20,3), dtype= np.float16) 
     
-    return positions, vitesses, masses, couleurs
+    return positions, vitesses, masses, couleurs, grid_pos, gravity_centers
+
+def belongs_to(position):
+
+    x_coor = position[0]
+    y_coor = position[1]
+    #print("x_coor :", x_coor)
+    #print("y_coor :", y_coor)
+
+    for i in range(0,20) :
+        inf = -10 + i*( 10 + 10)/19
+        sup = -10 + (i+1)*( 10 + 10)/19
+        if x_coor >= inf and x_coor <= sup :
+            ix = i
+        if y_coor >= inf and y_coor <= sup :
+            iy = i
+    
+    grid_index = np.zeros((2))
+    grid_index[0] = ix 
+    grid_index[1] = iy
+    return grid_index
+
+def belongs_vect(belongs_to):
+    return np.vectorize(belongs_to)
 
 
-def ajouter_trou_noir(positions, vitesses, masses, couleurs, masse, position, vitesse=np.zeros(3)):
+def ajouter_trou_noir(positions, vitesses, masses, grid_pos, couleurs, masse, position, vitesse=np.zeros(3)):
     """
     Ajoute le trou noir à l'indice 0
     """
@@ -41,10 +66,11 @@ def ajouter_trou_noir(positions, vitesses, masses, couleurs, masse, position, vi
     positions[0] = position
     vitesses[0] = vitesse
     couleurs[0] = [0, 0, 0]  # Noir
-    return positions, vitesses, masses, couleurs
+    grid_pos[0] = belongs_to(position)
+    return positions, vitesses, masses, couleurs, grid_pos
 
 
-def ajouter_etoile(positions, vitesses, masses, couleurs, idx, masse, position, vitesse=np.zeros(3)):
+def ajouter_etoile(positions, vitesses, masses, grid_pos, couleurs, idx, masse, position, vitesse=np.zeros(3)):
     """
     Ajoute une étoile à l'indice spécifié
     """
@@ -52,7 +78,8 @@ def ajouter_etoile(positions, vitesses, masses, couleurs, idx, masse, position, 
     positions[idx] = position
     vitesses[idx] = vitesse
     couleurs[idx] = _couleur_selon_masse(masse)
-    return positions, vitesses, masses, couleurs
+    grid_pos[idx] = belongs_to(position)
+    return positions, vitesses, masses, couleurs, grid_pos
 
 
 def _couleur_selon_masse(masse):
@@ -65,6 +92,32 @@ def _couleur_selon_masse(masse):
         return np.array([255, 255, 200], dtype=np.float32)  # Jaune
     else:
         return np.array([250, 150, 100], dtype=np.float32)  # Rouge
+    
+def update_gravity_centers(n_corps, positions,grid_pos,gravity_centers):
+        for i in range(20):
+            for j in range(20):
+                gravity_centers[i,j] = compute_gravity_center(n_corps,positions,grid_pos, i,j)
+        return gravity_centers
+
+
+def compute_gravity_center(n_corps,positions,grid_pos,coord_x,coord_y): 
+    #print("coord_x :", coord_x)
+    #print("coord_y :", coord_y)
+    loc_pos = []
+    #print("grid_pos :", grid_pos.shape)
+    for i in range(n_corps):
+        #print("self.grid[i,0] :", grid_pos[i,0])
+        #print("self.grid[i,1] :", grid_pos[i,1])
+        #print("self.grid[i,0] == coord_x :", self.grid[i,0] == coord_x )
+        #print("self.grid[i,1] == coord_y :", self.grid[i,1] == coord_y )
+
+        if int(grid_pos[i,0]) == coord_x and int(grid_pos[i,1]) == coord_y :
+
+            loc_pos.append(positions[i])
+    loc_pos = np.array(loc_pos)
+    #print("loc_pos :",loc_pos)
+    #print("np.mean(loc_pos) :", np.mean(loc_pos,axis =0))
+    return np.mean(loc_pos, axis=0) if np.shape(loc_pos)[0] > 0 else np.zeros((3,))
 
 
 # ============================================================
@@ -113,8 +166,42 @@ def calculer_accelerations_vectorisees(positions, masses):
     
     return accelerations
 
+def calculer_accelerations_vectorisees_2(n_corps, positions, masses, grid_pos, gravity_centers):
+        "Grid"
+        accelerations = np.zeros((n_corps, 3), dtype=np.float64)
+        #self.gravity_centers = np.ones((20,20,3), dtype=np.int16)
+        gravity_centers = update_gravity_centers(n_corps, positions, grid_pos, gravity_centers)
+        #print("self.grid :", self.grid)
+        #print("self.gravity_centers :", self.gravity_centers[6:11, 6:12,:])
+        for i in range(n_corps):
+            #print(" star id :", i)
+            for j in range(n_corps):
+                if i != j:
+                    #print("self.grid[j,0] :", self.grid[j,0])
+                    #print("self.grid[j,1] :", self.grid[j,1])
+                    #print("j", j)
+                    center_j = gravity_centers[int(grid_pos[j,0]), int(grid_pos[j,1])]
+                    if 1/2* np.linalg.norm(positions[i] - center_j) > 0.3 : #diametre = 0.3
+                        #print("center_ij :", center_ij)
+                        r_vec = positions[i] - center_j
+                        #print("r_vec :", r_vec)
+                    else :
+                        r_vec = positions[j] - positions[i]
+                    
+                    distance = np.linalg.norm(r_vec)
+                    #print("distance :", distance)
+                    
+                    if distance > 0:  # Éviter division par zéro
+                        # Force gravitationnelle: F = G * m_i * m_j / r²
+                        # Accélération: a = F / m_i = G * m_j / r² * (r_vec / r)
+                        acceleration_magnitude = G * masses[i]/ (distance**2)
+                        acceleration_direction = r_vec / distance
+                        accelerations[i] += acceleration_magnitude * acceleration_direction
+        
+        return accelerations 
 
-def mise_a_jour(positions, vitesses, masses, dt):
+
+def mise_a_jour(n_corps, positions, vitesses, masses, gravity_centers, dt):
     """
     Met à jour positions et vitesses de TOUS les corps en une seule opération
     
@@ -129,6 +216,7 @@ def mise_a_jour(positions, vitesses, masses, dt):
     """
     # Calcul vectorisé des accélérations
     accelerations = calculer_accelerations_vectorisees(positions, masses)
+    #accelerations = calculer_accelerations_vectorisees_2(positions, masses)
     
     # Mise à jour vectorisée (pas de boucle!)
     nouvelles_vitesses = vitesses + accelerations * dt
@@ -136,6 +224,37 @@ def mise_a_jour(positions, vitesses, masses, dt):
     
     return nouvelles_positions, nouvelles_vitesses
 
+def mise_a_jour_2(n_corps, positions, vitesses, masses, grid_pos, gravity_centers, dt):
+    """
+    Met à jour positions et vitesses de TOUS les corps en une seule opération
+    
+    Args:
+        positions (np.ndarray): Positions actuelles (N, 3)
+        vitesses (np.ndarray): Vitesses actuelles (N, 3)
+        masses (np.ndarray): Masses (N,)
+        dt (float): Pas de temps
+    
+    Returns:
+        tuple: (nouvelles_positions, nouvelles_vitesses)
+    """
+    # Calcul vectorisé des accélérations
+    #accelerations = calculer_accelerations_vectorisees(positions, masses)
+    accelerations = calculer_accelerations_vectorisees_2(n_corps, positions, masses, grid_pos, gravity_centers)
+    
+    # Mise à jour vectorisée (pas de boucle!)
+    nouvelles_vitesses = vitesses + accelerations * dt
+    nouvelles_positions = positions + vitesses * dt + 0.5 * accelerations * dt**2
+
+    #print("nouvelles positions :", nouvelles_positions.shape)
+
+    nouvelles_grid_pos = np.apply_along_axis(belongs_to, 1, nouvelles_positions )
+    #print("nouvelles grid_pos :", nouvelles_grid_pos.shape)
+
+  # bel_vec = np.vectorize(belongs_to)
+  # nouvelles_grid_pos = bel_vec(positions)
+    nouveaux_gravity_centers = update_gravity_centers(n_corps, nouvelles_positions, nouvelles_grid_pos, gravity_centers)
+    
+    return nouvelles_positions, nouvelles_vitesses, nouvelles_grid_pos, nouveaux_gravity_centers
 
 # ============================================================
 # FONCTIONS DE GESTION DES DONNÉES POUR VISUALISATION
@@ -183,11 +302,11 @@ def visualisation_vectorisee():
     print("="*60)
     
     # Création des tableaux
-    positions, vitesses, masses, couleurs = creer_galaxie(n_corps)
+    positions, vitesses, masses, couleurs, grid_pos, gravity_centers = creer_galaxie(n_corps)
     
     # Ajout du trou noir
-    positions, vitesses, masses, couleurs = ajouter_trou_noir(
-        positions, vitesses, masses, couleurs,
+    positions, vitesses, masses, couleurs, grid_pos = ajouter_trou_noir(
+        positions, vitesses, masses, grid_pos, couleurs,
         masse=1e6,
         position=np.zeros(3)
     )
@@ -215,8 +334,8 @@ def visualisation_vectorisee():
         ])
         
         masse = np.random.uniform(0.5, 10)
-        positions, vitesses, masses, couleurs = ajouter_etoile(
-            positions, vitesses, masses, couleurs,
+        positions, vitesses, masses, couleurs, grid_pos = ajouter_etoile(
+            positions, vitesses, masses,grid_pos, couleurs,
             i, masse, pos, vitesse
         )
     
@@ -252,15 +371,24 @@ def visualisation_vectorisee():
         
         # Compteur pour le débogage
         frame_count = 0
+
+        #print("grid_pos :", grid_pos)
         
         def updater(dt):
-            nonlocal positions, vitesses, frame_count
+            nonlocal positions, vitesses, frame_count, grid_pos, gravity_centers
             frame_count += 1
             
             # AUGMENTEZ CE FACTEUR POUR VOIR LE MOUVEMENT !
             facteur_temps = 500  # Au lieu de 10
+
+            #print("grid_pos :", grid_pos)
+
+            dt = 0.1
             
-            positions, vitesses = mise_a_jour(positions, vitesses, masses, dt * facteur_temps)
+            #positions, vitesses = mise_a_jour(positions, vitesses, masses, dt * facteur_temps)
+            positions, vitesses, grid_pos, gravity_centers = mise_a_jour_2(n_corps, positions, vitesses, masses, grid_pos, gravity_centers, dt * facteur_temps)
+
+            print("posiotions[10] :", positions[10])
             
             if frame_count % 30 == 0:
                 pos_max = np.max(np.abs(positions))
@@ -292,11 +420,11 @@ def benchmark_vectorise(n_etoiles=100, n_iterations=50, dt=0.01):
     Benchmark de la version vectorisée
     """
     n_corps = n_etoiles + 1
-    positions, vitesses, masses, couleurs = creer_galaxie(n_corps)
+    positions, vitesses, masses, couleurs, grid_pos, gravity_centers = creer_galaxie(n_corps)
     
     # Initialisation
-    positions, vitesses, masses, couleurs = ajouter_trou_noir(
-        positions, vitesses, masses, couleurs, 1e6, np.zeros(3)
+    positions, vitesses, masses, couleurs, grid_pos = ajouter_trou_noir(
+        positions, vitesses, masses,grid_pos, couleurs, 1e6, np.zeros(3)
     )
     
     for i in range(1, n_corps):
@@ -304,14 +432,14 @@ def benchmark_vectorise(n_etoiles=100, n_iterations=50, dt=0.01):
         theta = np.random.uniform(0, 2*np.pi)
         pos = np.array([r*np.cos(theta), r*np.sin(theta), 0])
         masse = np.random.uniform(0.5, 10)
-        positions, vitesses, masses, couleurs = ajouter_etoile(
-            positions, vitesses, masses, couleurs, i, masse, pos
+        positions, vitesses, masses, couleurs, grid_pos = ajouter_etoile(
+            positions, vitesses, masses, grid_pos, couleurs, i, masse, pos
         )
     
     # Mesure du temps
     start = time.time()
     for _ in range(n_iterations):
-        positions, vitesses = mise_a_jour(positions, vitesses, masses, dt)
+        positions, vitesses, grid_pos, gravity_centers = mise_a_jour_2(n_corps, positions, vitesses, masses, grid_pos, gravity_centers, dt)
     end = time.time()
     
     return end - start
