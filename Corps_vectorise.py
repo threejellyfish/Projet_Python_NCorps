@@ -35,11 +35,14 @@ def creer_galaxie(n_corps):
     return positions, vitesses, masses, couleurs, grid_pos, gravity_centers
 
 def belongs_to(position):
-
-    x_coor = position[0]
-    y_coor = position[1]
+    # CORRECTION : clamp pour éviter NameError si la position sort du domaine [-10, 10]
+    x_coor = np.clip(position[0], -10, 10)
+    y_coor = np.clip(position[1], -10, 10)
     #print("x_coor :", x_coor)
     #print("y_coor :", y_coor)
+
+    # CORRECTION : initialisation de ix et iy pour éviter NameError
+    ix, iy = 0, 0
 
     for i in range(0,20) :
         inf = -10 + i*( 10 + 10)/19
@@ -54,8 +57,8 @@ def belongs_to(position):
     grid_index[1] = iy
     return grid_index
 
-def belongs_vect(belongs_to):
-    return np.vectorize(belongs_to)
+# CORRECTION : belongs_vect supprimée car inutilisable telle qu'écrite
+# np.apply_along_axis(belongs_to, 1, positions) est utilisé à la place
 
 
 def ajouter_trou_noir(positions, vitesses, masses, grid_pos, couleurs, masse, position, vitesse=np.zeros(3)):
@@ -104,6 +107,7 @@ def compute_gravity_center(n_corps,positions,grid_pos,coord_x,coord_y):
     #print("coord_x :", coord_x)
     #print("coord_y :", coord_y)
     loc_pos = []
+    loc_masses = []  # CORRECTION : stocker les masses pour le centre de gravité pondéré
     #print("grid_pos :", grid_pos.shape)
     for i in range(n_corps):
         #print("self.grid[i,0] :", grid_pos[i,0])
@@ -112,12 +116,14 @@ def compute_gravity_center(n_corps,positions,grid_pos,coord_x,coord_y):
         #print("self.grid[i,1] == coord_y :", self.grid[i,1] == coord_y )
 
         if int(grid_pos[i,0]) == coord_x and int(grid_pos[i,1]) == coord_y :
-
             loc_pos.append(positions[i])
+            loc_masses.append(masses[i])  # CORRECTION : collecter les masses
     loc_pos = np.array(loc_pos)
+    loc_masses = np.array(loc_masses)
     #print("loc_pos :",loc_pos)
     #print("np.mean(loc_pos) :", np.mean(loc_pos,axis =0))
-    return np.mean(loc_pos, axis=0) if np.shape(loc_pos)[0] > 0 else np.zeros((3,))
+    # CORRECTION : moyenne pondérée par les masses (centre de gravité réel)
+    return np.average(loc_pos, axis=0, weights=loc_masses) if np.shape(loc_pos)[0] > 0 else np.zeros((3,))
 
 
 # ============================================================
@@ -183,7 +189,8 @@ def calculer_accelerations_vectorisees_2(n_corps, positions, masses, grid_pos, g
                     center_j = gravity_centers[int(grid_pos[j,0]), int(grid_pos[j,1])]
                     if 1/2* np.linalg.norm(positions[i] - center_j) > 0.3 : #diametre = 0.3
                         #print("center_ij :", center_ij)
-                        r_vec = positions[i] - center_j
+                        # CORRECTION : r_vec doit pointer de i VERS j (attraction)
+                        r_vec = center_j - positions[i]
                         #print("r_vec :", r_vec)
                     else :
                         r_vec = positions[j] - positions[i]
@@ -194,7 +201,8 @@ def calculer_accelerations_vectorisees_2(n_corps, positions, masses, grid_pos, g
                     if distance > 0:  # Éviter division par zéro
                         # Force gravitationnelle: F = G * m_i * m_j / r²
                         # Accélération: a = F / m_i = G * m_j / r² * (r_vec / r)
-                        acceleration_magnitude = G * masses[i]/ (distance**2)
+                        # CORRECTION : utiliser masses[j] (masse du corps attracteur) et non masses[i]
+                        acceleration_magnitude = G * masses[j] / (distance**2)
                         acceleration_direction = r_vec / distance
                         accelerations[i] += acceleration_magnitude * acceleration_direction
         
@@ -247,7 +255,7 @@ def mise_a_jour_2(n_corps, positions, vitesses, masses, grid_pos, gravity_center
 
     #print("nouvelles positions :", nouvelles_positions.shape)
 
-    nouvelles_grid_pos = np.apply_along_axis(belongs_to, 1, nouvelles_positions )
+    nouvelles_grid_pos = np.apply_along_axis(belongs_to, 1, nouvelles_positions)
     #print("nouvelles grid_pos :", nouvelles_grid_pos.shape)
 
   # bel_vec = np.vectorize(belongs_to)
@@ -415,18 +423,13 @@ def visualisation_vectorisee():
 # FONCTION DE BENCHMARK
 # ============================================================
 
-def benchmark_vectorise(n_etoiles=100, n_iterations=50, dt=0.01):
-    """
-    Benchmark de la version vectorisée
-    """
+def _init_galaxie(n_etoiles):
+    """Initialise une galaxie pour le benchmark"""
     n_corps = n_etoiles + 1
     positions, vitesses, masses, couleurs, grid_pos, gravity_centers = creer_galaxie(n_corps)
-    
-    # Initialisation
     positions, vitesses, masses, couleurs, grid_pos = ajouter_trou_noir(
-        positions, vitesses, masses,grid_pos, couleurs, 1e6, np.zeros(3)
+        positions, vitesses, masses, grid_pos, couleurs, 1e6, np.zeros(3)
     )
-    
     for i in range(1, n_corps):
         r = np.random.uniform(1, 5)
         theta = np.random.uniform(0, 2*np.pi)
@@ -435,7 +438,15 @@ def benchmark_vectorise(n_etoiles=100, n_iterations=50, dt=0.01):
         positions, vitesses, masses, couleurs, grid_pos = ajouter_etoile(
             positions, vitesses, masses, grid_pos, couleurs, i, masse, pos
         )
-    
+    return n_corps, positions, vitesses, masses, couleurs, grid_pos, gravity_centers
+
+
+def benchmark_vectorise(n_etoiles=100, n_iterations=50, dt=0.01):
+    """
+    Benchmark de la version vectorisée
+    """
+    n_corps, positions, vitesses, masses, couleurs, grid_pos, gravity_centers = _init_galaxie(n_etoiles)
+
     # Mesure du temps
     start = time.time()
     for _ in range(n_iterations):
@@ -445,6 +456,61 @@ def benchmark_vectorise(n_etoiles=100, n_iterations=50, dt=0.01):
     return end - start
 
 
+def benchmark_comparaison(n_etoiles_list=None, n_iterations=30, dt=0.01):
+    """
+    Compare les temps de calcul entre la version 1 (classes) et la version 2 (vectorisée)
+    pour différents nombres d'étoiles.
+    """
+    if n_etoiles_list is None:
+        n_etoiles_list = [50, 100, 200, 500]
+
+    # Import de la fonction de benchmark v1
+    try:
+        from Corps_accel import NCorps, Corps
+        def benchmark_v1(n_etoiles, n_iterations, dt):
+            galaxy = NCorps()
+            black_hole = Corps(mass=1e6, position=np.zeros(3))
+            galaxy.add(black_hole)
+            for _ in range(n_etoiles):
+                r = np.random.uniform(1, 5)
+                theta = np.random.uniform(0, 2*np.pi)
+                pos = np.array([r*np.cos(theta), r*np.sin(theta), 0])
+                masse = np.random.uniform(0.5, 10)
+                star = Corps(mass=masse, position=pos)
+                galaxy.add(star)
+            start = time.time()
+            for _ in range(n_iterations):
+                galaxy.update(dt)
+            return time.time() - start
+        v1_disponible = True
+    except ImportError:
+        v1_disponible = False
+        print("⚠️  Corps_accel.py introuvable : comparaison v1 désactivée\n")
+
+    print("="*60)
+    print("COMPARAISON TEMPS DE CALCUL : V1 (classes) vs V2 (vectorisée)")
+    print(f"Nombre d'itérations : {n_iterations}")
+    print("="*60)
+
+    if v1_disponible:
+        print(f"{'N étoiles':<12} {'V1 classes (s)':<18} {'V2 vectorisée (s)':<20} {'Speedup'}")
+        print("-"*60)
+    else:
+        print(f"{'N étoiles':<12} {'V2 vectorisée (s)'}")
+        print("-"*30)
+
+    for n in n_etoiles_list:
+        t2 = benchmark_vectorise(n_etoiles=n, n_iterations=n_iterations, dt=dt)
+        if v1_disponible:
+            t1 = benchmark_v1(n_etoiles=n, n_iterations=n_iterations, dt=dt)
+            speedup = t1 / t2 if t2 > 0 else float('inf')
+            print(f"{n:<12} {t1:<18.4f} {t2:<20.4f} x{speedup:.1f}")
+        else:
+            print(f"{n:<12} {t2:.4f}")
+
+    print("="*60)
+
+
 if __name__ == "__main__":
     import sys
     
@@ -452,6 +518,9 @@ if __name__ == "__main__":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 100
         t = benchmark_vectorise(n_etoiles=n, n_iterations=30)
         print(f"Temps pour {n} étoiles: {t:.4f} secondes")
+
+    elif len(sys.argv) > 1 and sys.argv[1] == "--comparaison":
+        benchmark_comparaison()
     
     elif len(sys.argv) > 1 and sys.argv[1] == "--visualize":
         visualisation_vectorisee()
@@ -459,4 +528,5 @@ if __name__ == "__main__":
     else:
         print("Usage:")
         print("  python3 Corps_vectorise.py --benchmark [n_etoiles]")
+        print("  python3 Corps_vectorise.py --comparaison")
         print("  python3 Corps_vectorise.py --visualize")
