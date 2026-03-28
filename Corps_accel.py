@@ -85,6 +85,7 @@ class NCorps:
         else:
             self.grid = np.zeros((0, 2), dtype=np.int8)
         self.gravity_centers = np.zeros((20,20,3), dtype=np.float32)
+        self.use_grid = False 
     
     def add(self, corps): 
         self.collection.append(corps)
@@ -154,15 +155,20 @@ class NCorps:
     
     def update(self, dt):
         """Met à jour tous les corps avec leurs accélérations"""
-        accelerations = self.calculate_accelerations2()
+        if self.use_grid :
+            accelerations = self.calculate_accelerations2()
+        else :
+            accelerations = self.calculate_accelerations()
         #print("accelerations 1 :", accelerations)
         
         for i, corps in enumerate(self.collection):
             #print(" star id :", i)
             corps.update(accelerations[i], dt)
-            self.grid[i] = self.collection[i].grid_pos
+            if self.use_grid :
+                self.grid[i] = self.collection[i].grid_pos
 
-        self.gravity_centers = self.update_gravity_centers()
+        #if self.use_grid :
+            #self.gravity_centers = self.update_gravity_centers()
 
             
     def update2(self, dt):
