@@ -95,34 +95,12 @@ class NCorps:
                         accelerations[i] += acceleration_magnitude * acceleration_direction
         
         return accelerations
-    
-    def calculate_accelerations2(self):
-        "Grid"
-        accelerations = np.zeros((self.len, 3), dtype=np.float64)
-        for i in range(self.len):
-            for j in range(self.len):
-                if i != j:
-                    if 1/2* np.linalg.norm(self.collection[i].position - self.get_gravity_center(self.grid_pos[j,0], self.grid_pos[j,1])) > 0.5 :
-                        r_vec = self.collection[j].position - self.get_gravity_center(self.grid_pos[j,0], self.grid_pos[j,1])
-                        distance = np.linalg.norm(r_vec)
-                    else :
-                        # Vecteur de i à j
-                        r_vec = self.collection[j].position - self.collection[i].position
-                        distance = np.linalg.norm(r_vec)
-                    
-                    if distance > 0:  # Éviter division par zéro
-                        # Force gravitationnelle: F = G * m_i * m_j / r²
-                        # Accélération: a = F / m_i = G * m_j / r² * (r_vec / r)
-                        acceleration_magnitude = G * self.collection[j].mass / (distance**2)
-                        acceleration_direction = r_vec / distance
-                        accelerations[i] += acceleration_magnitude * acceleration_direction
-        
-        return accelerations 
 
     
     def update(self, dt):
         """Met à jour tous les corps avec leurs accélérations"""
-        accelerations = self.calculate_accelerations2()
+        accelerations = self.calculate_accelerations()
+        print("acceleration :", accelerations)
         
         for i, corps in enumerate(self.collection):
             corps.update(accelerations[i], dt)
@@ -175,7 +153,7 @@ def main():
     import os
     
     # Paramètres
-    nstars = 100
+    nstars = 200
     filename = "data/galaxy_1000"
     
     # Création de la galaxie
@@ -261,28 +239,6 @@ def main():
 
     grid = np.linspace(-3,3, 1000)
 
-    #grid = np.meshgrid(np.linspace(-3,3,20), np.linspace(-3,3,20))
-    #print(grid)
-
-    #def belongs_to(pos, grid):
-    #    for p in points :
-    #        x_coor = point[0]
-    #        y_coor = point[1]
-
-    #        for i in range(0,20) :
-    #            inf = -3 + i*( 3 + 3)/6
-    #            sup = -3 + (i+1)*( 3 + 3)/6
-    #            if x_coor >= inf and x_coor <= sup :
-    #                ix = i
-    #            if y_coor >= inf and y_coor <= sup :
-    #                iy = i
-    #    grid_index = (ix, iy)
-    #    return grid_index
-
-    #### mis a jour 
-    #for i in range(len) :
-    #    galaxy.grid_pos[i] = belongs_to(star.pos, grid)
-
 
     colors = galaxy.get_colors()
     masses = galaxy.get_masses()
@@ -302,7 +258,7 @@ def main():
     
     # Fonction de mise à jour pour la visualisation
     def updater(dt):
-        galaxy.update(dt)
+        galaxy.update2(dt)
         return galaxy.get_points(), galaxy.get_colors(), luminosities
     
     # Import et lancement de la visualisation
@@ -324,7 +280,7 @@ def main():
         print(f"Erreur de visualisation: {e}")
         # Simulation sans visualisation
         for step in range(100):
-            galaxy.update(0.01)
+            galaxy.update2(0.01)
             if step % 10 == 0:
                 print(f"Étape {step}")
 
