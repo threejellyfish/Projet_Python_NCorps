@@ -46,9 +46,12 @@ class Corps:
         print(f"Couleur: {self.color}")
     
     def belongs_to(self, pos):
+        # CORRECTION : clamp pour éviter NameError si l'étoile sort du domaine [-3, 3]
+        x_coor = np.clip(pos[0], -3, 3)
+        y_coor = np.clip(pos[1], -3, 3)
 
-        x_coor = pos[0]
-        y_coor = pos[1]
+        # CORRECTION : initialisation de ix et iy pour éviter NameError
+        ix, iy = 0, 0
 
         for i in range(0,20) :
             inf = -3 + i*( 3 + 3)/19
@@ -76,7 +79,11 @@ class NCorps:
     def __init__(self, collection=None):
         self.collection = collection if collection is not None else []
         self.len = len(self.collection)
-        self.grid = np.zeros((self.len, 2), dtype=np.int8)
+        # CORRECTION : initialiser la grille avec les positions réelles si collection fournie
+        if self.len > 0:
+            self.grid = np.array([c.grid_pos for c in self.collection], dtype=np.int8).reshape(-1, 2)
+        else:
+            self.grid = np.zeros((0, 2), dtype=np.int8)
         self.gravity_centers = np.zeros((20,20,3), dtype=np.float32)
     
     def add(self, corps): 
@@ -124,7 +131,8 @@ class NCorps:
                     center_j = self.gravity_centers[int(self.grid[j,0]), int(self.grid[j,1])]
                     if 1/2* np.linalg.norm(self.collection[i].position - center_j) > 0.3 : #diametre = 0.3
                         #print("center_ij :", center_ij)
-                        r_vec = self.collection[i].position - center_j
+                        # CORRECTION : r_vec doit pointer de i VERS j (attraction)
+                        r_vec = center_j - self.collection[i].position
                         #print("r_vec :", r_vec)
                     else :
                         r_vec = self.collection[j].position - self.collection[i].position
@@ -135,7 +143,9 @@ class NCorps:
                     if distance > 0:  # Éviter division par zéro
                         # Force gravitationnelle: F = G * m_i * m_j / r²
                         # Accélération: a = F / m_i = G * m_j / r² * (r_vec / r)
-                        acceleration_magnitude = G * self.collection[j].mass / (distance**2)
+                        # CORRECTION : utiliser la masse totale de la cellule j (pondérée)
+                        cell_mass_j = self.compute_cell_mass(int(self.grid[j,0]), int(self.grid[j,1]))
+                        acceleration_magnitude = G * cell_mass_j / (distance**2)
                         acceleration_direction = r_vec / distance
                         accelerations[i] += acceleration_magnitude * acceleration_direction
         
@@ -160,13 +170,14 @@ class NCorps:
         #print("Verlet accelerations :", acceleration)
         a = self.calculate_accelerations2()
         for i in range(self.len):
-            position = self.collection[i].position + self.collection[i].speed*dt + 0.5* a*dt*dt
+            # CORRECTION : utiliser a[i] et non a (vecteur entier)
+            position = self.collection[i].position + self.collection[i].speed*dt + 0.5* a[i]*dt*dt
             self.collection[i].update_position(position)
         a_new = self.calculate_accelerations2()
         for i in range(self.len):
-
-            speed = self.collection[i].speed + 0.5*(a + a_new)*dt
-            self.collecion[i].update_speed(speed)
+            # CORRECTION : utiliser a[i] et non a, et corriger la faute de frappe "collecion"
+            speed = self.collection[i].speed + 0.5*(a[i] + a_new[i])*dt
+            self.collection[i].update_speed(speed)
         
 
     def update_gravity_centers(self):
@@ -181,6 +192,7 @@ class NCorps:
         #print("coord_x :", coord_x)
         #print("coord_y :", coord_y)
         loc_pos = []
+        loc_masses = []  # CORRECTION : stocker les masses pour le centre de gravité pondéré
         for i in range(self.len):
             #print("self.grid[i,0] :", self.grid[i,0])
             #print("self.grid[i,1] :", self.grid[i,1])
@@ -189,11 +201,21 @@ class NCorps:
 
             if self.grid[i,0] == coord_x and self.grid[i,1] == coord_y :
                 loc_pos.append(self.collection[i].position)
+                loc_masses.append(self.collection[i].mass)  # CORRECTION : collecter les masses
         loc_pos = np.array(loc_pos)
+        loc_masses = np.array(loc_masses)
         #print("loc_pos :",loc_pos)
         #print("np.mean(loc_pos) :", np.mean(loc_pos,axis =0))
-        return np.mean(loc_pos, axis=0) if np.shape(loc_pos)[0] > 0 else np.zeros((3,))
-    
+        # CORRECTION : moyenne pondérée par les masses (centre de gravité réel)
+        return np.average(loc_pos, axis=0, weights=loc_masses) if np.shape(loc_pos)[0] > 0 else np.zeros((3,))
+
+    def compute_cell_mass(self, coord_x, coord_y):
+        """Calcule la masse totale des corps dans une cellule de la grille"""
+        total_mass = 0.0
+        for i in range(self.len):
+            if self.grid[i,0] == coord_x and self.grid[i,1] == coord_y:
+                total_mass += self.collection[i].mass
+        return total_mass
     
     def get_points(self):
         """Retourne les positions pour la visualisation"""
