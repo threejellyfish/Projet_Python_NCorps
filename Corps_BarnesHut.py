@@ -1,7 +1,7 @@
 import numpy as np
 import os
 from numba import njit, prange
-from visualizer3d_sans_vbo import Visualizer3D
+#from visualizer3d_sans_vbo import Visualizer3D
 
 # --- CONFIGURATION (Inspirée de votre version vectorisée) ---
 G = 1.560339e-13
@@ -122,6 +122,7 @@ class BarnesHutSim:
 
 if __name__ == "__main__":
     # Utilisez votre fichier ici
+    from visualizer3d_sans_vbo import Visualizer3D
     FILE = "data/galaxy_100"
     sim = BarnesHutSim(FILE)
     

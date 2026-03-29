@@ -23,7 +23,6 @@ def benchmark():
     print(f"{'N':<10} | {'Méthode':<20} | {'Temps Moyen (s)':<15} | {'FPS':<10}")
     print("-" * 65)
 
-    methods = ['Naïve (Objet)', 'Grille (Grid)', 'Vectorisée', 'Numba Parallel', 'Barnes-Hut']
     methods = ['Grille (Grid)', 'Vectorisée', 'Numba Parallel', 'Barnes-Hut']
     results = {m: [] for m in methods}
 
@@ -82,7 +81,7 @@ def benchmark():
                 galaxy.update(dt)
             return (time.time() - start) / iterations
 
-        results['Grille (Grid)'].append(run_with_timeout(run_grid) if n <= 10000 else None)
+        results['Grille (Grid)'].append(run_with_timeout(run_grid) if n <= 1000 else None)
 
         # --- VECTORISE ---
         def run_vect():
@@ -93,7 +92,7 @@ def benchmark():
                 p_v, v_v = mise_a_jour_vectorisee(p_v, v_v, masses, dt)
             return (time.time() - start) / iterations
 
-        results['Vectorisée'].append(run_with_timeout(run_vect) if n <= 10000 else None)
+        results['Vectorisée'].append(run_with_timeout(run_vect) if n <= 1000 else None)
 
         # --- NUMBA ---
         def run_numba():
@@ -102,11 +101,11 @@ def benchmark():
             start = time.time()
             for _ in range(iterations):
                 acc = numba_parallel_accel(p_n, masses, G, len(masses))
-                v_n += acc * dt
+                v_n += acc * dt + 0.5*acc*dt**2
                 p_n += v_n * dt
             return (time.time() - start) / iterations
 
-        results['Numba Parallel'].append(run_with_timeout(run_numba) if n <= 10000 else None)
+        results['Numba Parallel'].append(run_with_timeout(run_numba) if n <= 1000 else None)
 
         # --- BARNES-HUT ---
         def run_bh():
