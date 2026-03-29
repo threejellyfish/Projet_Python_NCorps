@@ -71,7 +71,7 @@ def benchmark():
 
         results['Grille (Grid)'].append(run_with_timeout(run_grid) if n <= 1000 else None)
 
-        print("Hi")
+        print("run_grid :", n, " Done")
 
         # --- VECTORISE ---
         def run_vect():
@@ -83,7 +83,7 @@ def benchmark():
             return (time.time() - start) / iterations
 
         results['Vectorisée'].append(run_with_timeout(run_vect) if n <= 10000 else None)
-        print("Hi2")
+        print("run_vect :", n, " Done")
 
         # --- NUMBA ---
         def run_numba():
@@ -97,7 +97,7 @@ def benchmark():
             return (time.time() - start) / iterations
 
         results['Numba Parallel'].append(run_with_timeout(run_numba) if n <= 10000 else None)
-        print("Hi3")
+        print("run_numba :", n, " Done")
 
         # --- BARNES-HUT ---
         def run_bh():
@@ -109,7 +109,7 @@ def benchmark():
             return (time.time() - start) / iterations
 
         results['Barnes-Hut'].append(run_with_timeout(run_bh))
-        print("Hi4")
+        print("run_barnes_hut :", n, " Done")
 
     # --- SAVE CSV ---
     import csv
