@@ -55,7 +55,10 @@ class Corps:
                 ix = i
             if y_coor >= inf and y_coor <= sup :
                 iy = i
-        grid_index = (ix, iy)
+
+        grid_index = np.zeros((2))
+        grid_index[0] = ix
+        grid_index[1] = iy
         return grid_index
 
     #nstars = 100
@@ -70,11 +73,13 @@ class NCorps:
         self.collection = collection if collection is not None else []
         self.len = len(self.collection)
         self.grid_pos = np.zeros((self.len, 2))
+        self.gravity_centers = np.zeros((20, 20, 3), dtype=np.float32)
     
     def add(self, corps): 
         self.collection.append(corps)
-        self.len += 1 
-    
+        self.len += 1
+        self.grid = np.concatenate((self.grid, np.expand_dims(corps.grid_pos, axis=0)))
+        
     def calculate_accelerations(self):
         """Calcule l'accélération pour chaque corps due à l'attraction gravitationnelle"""
         n = self.len
@@ -107,7 +112,7 @@ class NCorps:
             
     def update2(self, dt):
         "Verlet"
-        a = self.calculate_accelerations2()
+        a = self.calculate_accelerations()
         for i in range(self.len):
             position = self.collection[i].position + self.collection[i].speed*dt + 0.5* a*dt*dt
             self.collection[i].update_position(position)

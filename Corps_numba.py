@@ -297,78 +297,75 @@ def benchmark_multi_taille():
 
 
 def visualisation_numba(n_etoiles=200, facteur_temps=200):
-    n_corps = n_etoiles + 1
+    from galaxy_generator import generate_galaxy
+    import os
+
+    galaxy_file = f"data/galaxy_{n_etoiles}"
+    if not os.path.exists(galaxy_file):
+        print(f"Génération du fichier {galaxy_file}...")
+        generate_galaxy(n_stars=n_etoiles, output_file=galaxy_file)
+
+    masses_list, pos_list, vel_list, _ = [], [], [], []
+    with open(galaxy_file, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            masses_list.append(float(parts[0]))
+            pos_list.append([float(parts[1]), float(parts[2]), float(parts[3])])
+            vel_list.append([float(parts[4]), float(parts[5]), float(parts[6])])
+
+    n_corps = len(masses_list)
     galaxie = GalaxieNumba(n_corps)
-    galaxie.ajouter_trou_noir(1e6, np.zeros(3))
-    
-    print(f"Création de {n_etoiles} étoiles...")
-    for i in range(1, n_corps):
-        r = np.random.uniform(2, 8)
-        theta = np.random.uniform(0, 2*np.pi)
-        pos = np.array([
-            r * np.cos(theta),
-            r * np.sin(theta),
-            np.random.uniform(-0.5, 0.5)
-        ])
-        v = np.sqrt(G * 1e6 / r)
-        vitesse = np.array([
-            -v * np.sin(theta),
-            v * np.cos(theta),
-            0
-        ])
-        masse = np.random.uniform(0.5, 10)
-        galaxie.ajouter_etoile(i, masse, pos, vitesse)
-    
+
+    for i in range(n_corps):
+        galaxie.masses[i] = masses_list[i]
+        galaxie.positions[i] = pos_list[i]
+        galaxie.vitesses[i] = vel_list[i]
+        if i == 0:
+            galaxie.couleurs[i] = np.array([0, 0, 0], dtype=np.float32)
+        else:
+            galaxie.couleurs[i] = galaxie._couleur_selon_masse(masses_list[i])
+
+    print(f"Galaxie chargée depuis {galaxy_file} : {n_corps} corps")
     print("Préparation de la visualisation...")
-    
+
     try:
         from visualizer3d_sans_vbo import Visualizer3D
-        
+
         points_init = galaxie.get_points()
-        print(f"Points initiaux: min={points_init.min(axis=0)}, max={points_init.max(axis=0)}")
-        
         visualizer = Visualizer3D(
             points=points_init,
             colors=galaxie.get_couleurs(),
             luminosities=galaxie.get_luminosites(),
-            bounds=((-12, 12), (-12, 12), (-3, 3))
+            bounds=((-2, 2), (-2, 2), (-0.5, 0.5))
         )
-        
-        visualizer.camera_distance = 18
+        visualizer.camera_distance = 4
         frame_count = 0
         start_time = time.time()
-        
+
         def updater_numba(dt_visu):
             nonlocal frame_count, start_time
             frame_count += 1
-            dt_effectif = 0.1 * facteur_temps
+            dt_effectif = 0.001 * facteur_temps
             galaxie.update(dt_effectif, mode='numba_parallel')
             points = galaxie.get_points()
-            couleurs = galaxie.get_couleurs()
-            luminosites = galaxie.get_luminosites()
-            
+
             if frame_count % 60 == 0:
                 elapsed = time.time() - start_time
                 distances = np.linalg.norm(points[1:], axis=1)
                 print(f"Frame {frame_count:4d} | Temps réel: {elapsed:5.1f}s | "
-                      f"Max distance: {distances.max():6.2f} ly | "
-                      f"Étoile 1: ({points[1,0]:6.2f}, {points[1,1]:6.2f}, {points[1,2]:6.2f})")
-            
-            return points, couleurs, luminosites
-        
-        print("\n" + "="*60)
-        print("🎮 VISUALISATION AVEC NUMBA")
-        print("="*60)
-        print(f"   {n_etoiles} étoiles | Facteur temps: {facteur_temps}x")
-        print(f"   Mode: Parallélisé sur tous les cœurs disponibles")
-        print("   Appuyez sur ECHAP pour quitter")
-        print("="*60 + "\n")
-        
+                      f"Max distance: {distances.max():6.4f} ly")
+
+            return points, galaxie.get_couleurs(), galaxie.get_luminosites()
+
+        print(f"\n{'='*60}")
+        print(f"VISUALISATION NUMBA — {n_corps} corps | Facteur: {facteur_temps}x")
+        print(f"Appuyez sur ECHAP pour quitter")
+        print(f"{'='*60}\n")
+
         visualizer.run_with_updater(updater_numba, dt=0.016)
-        
+
     except ImportError:
         print("Erreur: module visualizer3d_sans_vbo non trouvé")
-        print("Vérifiez que le fichier est dans le même dossier")
     except Exception as e:
         print(f"Erreur de visualisation: {e}")
         import traceback

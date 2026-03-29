@@ -310,7 +310,7 @@ def main():
             luminosities=luminosities,
             bounds=bounds
         )
-        visualizer.run_with_updater(updater, dt=0.01)
+        visualizer.run_with_updater(updater, dt=0.05)
     except Exception as e:
         print(f"Erreur de visualisation: {e}")
         for step in range(100):
