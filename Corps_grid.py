@@ -18,7 +18,7 @@ class Corps:
             self.color = np.array([150, 180, 255], dtype=np.float32)  # Bleu-blanc
         elif self.mass > 2:
             self.color = np.array([255, 255, 255], dtype=np.float32)  # Blanc
-        elif self.mass > 1:
+        elif self.mass >= 1:
             self.color = np.array([255, 255, 200], dtype=np.float32)  # Jaune
         else:
             self.color = np.array([250, 150, 100], dtype=np.float32)  # Rouge

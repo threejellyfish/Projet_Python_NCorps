@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import signal
 
 # --- IMPORTS ---
-from Corps_accel import NCorps as NCorpsNaive, Corps as CorpsNaive
+#from Corps_accel import NCorps as NCorpsNaive, Corps as CorpsNaive
 from Corps_vectorise import mise_a_jour as mise_a_jour_vectorisee
 from Corps_numba import _calcul_accelerations_numba_parallel as numba_parallel_accel
 from Corps_BarnesHut import BarnesHutSim
@@ -24,6 +24,7 @@ def benchmark():
     print("-" * 65)
 
     methods = ['Naïve (Objet)', 'Grille (Grid)', 'Vectorisée', 'Numba Parallel', 'Barnes-Hut']
+    methods = ['Grille (Grid)', 'Vectorisée', 'Numba Parallel', 'Barnes-Hut']
     results = {m: [] for m in methods}
 
     for n in n_values:
@@ -71,11 +72,11 @@ def benchmark():
         #        galaxy.update(dt)
         #   return (time.time() - start) / iterations
 
-        results['Naïve (Objet)'].append(run_with_timeout(run_naive) if n <= 1000 else None)
+        #results['Naïve (Objet)'].append(run_with_timeout(run_naive) if n <= 1000 else None)
 
         # --- GRID ---
         def run_grid():
-            galaxy = NCorpsGrid(n=len(masses)-1, filename=galaxy_file)
+            galaxy = NCorpsGrid(n=len(masses)-1, filename=galaxy_file, use_grid=True)
             start = time.time()
             for _ in range(iterations):
                 galaxy.update(dt)
@@ -89,7 +90,7 @@ def benchmark():
             gravity_centers = np.zeros((20, 20, 3), dtype=np.float32)
             start = time.time()
             for _ in range(iterations):
-                p_v, v_v = mise_a_jour_vectorisee(len(masses), p_v, v_v, masses, gravity_centers, dt)
+                p_v, v_v = mise_a_jour_vectorisee(p_v, v_v, masses, dt)
             return (time.time() - start) / iterations
 
         results['Vectorisée'].append(run_with_timeout(run_vect) if n <= 10000 else None)
