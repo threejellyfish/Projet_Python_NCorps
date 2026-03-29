@@ -17,7 +17,7 @@ class Corps:
             self.color = np.array([150, 180, 255], dtype=np.float32)  # Bleu-blanc
         elif self.mass > 2:
             self.color = np.array([255, 255, 255], dtype=np.float32)  # Blanc
-        elif self.mass >= 1:  # CORRECTION : >= au lieu de >
+        elif self.mass >= 1:
             self.color = np.array([255, 255, 200], dtype=np.float32)  # Jaune
         else:
             self.color = np.array([250, 150, 100], dtype=np.float32)  # Rouge
@@ -48,7 +48,6 @@ class Corps:
         x_coor = pos[0]
         y_coor = pos[1]
 
-        # CORRECTION : initialisation pour éviter UnboundLocalError si pos hors domaine
         ix, iy = 0, 0
 
         for i in range(20):
@@ -132,12 +131,12 @@ class NCorps:
         """Verlet"""
         a = self.calculate_accelerations2()
         for i in range(self.len):
-            position = self.collection[i].position + self.collection[i].speed * dt + 0.5 * a * dt * dt
+            position = self.collection[i].position + self.collection[i].speed * dt + 0.5 * a[i] * dt * dt
             self.collection[i].update_position(position)
         a_new = self.calculate_accelerations2()
         for i in range(self.len):
-            speed = self.collection[i].speed + 0.5 * (a + a_new) * dt
-            self.collection[i].update_speed(speed)  # CORRECTION : "collection" au lieu de "collecion"
+            speed = self.collection[i].speed + 0.5 * (a[i] + a_new[i]) * dt
+            self.collection[i].update_speed(speed)
 
     def update_gravity_centers(self):
         for i in range(20):
@@ -146,7 +145,7 @@ class NCorps:
         return self.gravity_centers
 
     def compute_gravity_center(self, coord_x, coord_y):
-        """CORRECTION : moyenne pondérée par les masses (centre de gravité réel)"""
+        """Moyenne pondérée par les masses (centre de gravité réel)"""
         loc_pos = []
         loc_masses = []
         for i in range(self.len):
@@ -181,6 +180,7 @@ class NCorps:
 
 def main():
     import os
+    import time
     
     nstars = 100
     filename = "data/galaxy_1000"
@@ -251,7 +251,18 @@ def main():
     print(f"Nombre de corps: {galaxy.len}")
     print(f"Limites: {bounds}")
     
+    frame_data = {'count': 0, 'last': time.perf_counter()}
+
     def updater(dt):
+        frame_data['count'] += 1
+        now = time.perf_counter()
+        elapsed = now - frame_data['last']
+        if elapsed >= 1.0:
+            print(f"FPS: {frame_data['count'] / elapsed:.1f} | "
+                  f"Temps/frame: {elapsed / frame_data['count'] * 1000:.1f} ms | "
+                  f"N corps: {galaxy.len}")
+            frame_data['count'] = 0
+            frame_data['last'] = now
         galaxy.update(dt)
         return galaxy.get_points(), galaxy.get_colors(), luminosities
     
