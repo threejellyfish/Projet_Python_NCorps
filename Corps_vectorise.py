@@ -103,56 +103,47 @@ def get_luminosites(masses):
 # FONCTION PRINCIPALE DE VISUALISATION
 # ============================================================
 
-def visualisation_vectorisee(n_etoiles=100, facteur_temps=500, dt_simulation=0.1):
-    n_corps = n_etoiles + 1
+def visualisation_vectorisee(n_etoiles=100, facteur_temps=500, dt_simulation=0.001):
+    from galaxy_generator import generate_galaxy
+    import os
 
-    print("\n" + "="*60)
-    print("VERSION 2 - VECTORISÉE AVEC NUMPY")
-    print("="*60)
+    galaxy_file = f"data/galaxy_{n_etoiles}"
+    if not os.path.exists(galaxy_file):
+        print(f"Génération du fichier {galaxy_file}...")
+        generate_galaxy(n_stars=n_etoiles, output_file=galaxy_file)
 
-    positions, vitesses, masses, couleurs = creer_galaxie(n_corps)
-    positions, vitesses, masses, couleurs = ajouter_trou_noir(
-        positions, vitesses, masses, couleurs, masse=1e6, position=np.zeros(3)
-    )
+    masses_list, pos_list, vel_list, col_list = [], [], [], []
+    with open(galaxy_file, 'r') as f:
+        for line in f:
+            parts = line.strip().split()
+            masses_list.append(float(parts[0]))
+            pos_list.append([float(parts[1]), float(parts[2]), float(parts[3])])
+            vel_list.append([float(parts[4]), float(parts[5]), float(parts[6])])
 
-    print(f"Création de {n_etoiles} étoiles...")
+    n_corps = len(masses_list)
+    positions = np.array(pos_list, dtype=np.float64)
+    vitesses = np.array(vel_list, dtype=np.float64)
+    masses = np.array(masses_list, dtype=np.float64)
+    couleurs = np.zeros((n_corps, 3), dtype=np.float32)
+    couleurs[0] = [0, 0, 0]
     for i in range(1, n_corps):
-        r = np.random.uniform(2, 8)
-        theta = np.random.uniform(0, 2*np.pi)
-        phi = np.random.uniform(-0.2, 0.2)
-        pos = np.array([
-            r * np.cos(theta) * np.cos(phi),
-            r * np.sin(theta) * np.cos(phi),
-            r * np.sin(phi) * 0.3
-        ])
-        v_orbital = np.sqrt(G * masses[0] / r)
-        vitesse = np.array([-v_orbital * np.sin(theta), v_orbital * np.cos(theta), 0])
-        masse = np.random.uniform(0.3, 12)
-        positions, vitesses, masses, couleurs = ajouter_etoile(
-            positions, vitesses, masses, couleurs, i, masse, pos, vitesse
-        )
+        couleurs[i] = _couleur_selon_masse(masses[i])
 
-    print(f"Vitesse orbitale typique: {np.linalg.norm(vitesses[1]):.2e} ly/an")
-    print(f"Masse totale: {masses.sum():.2e} masses solaires")
+    print(f"Galaxie chargée depuis {galaxy_file} : {n_corps} corps")
 
-    points_init = get_points(positions)
     lum = get_luminosites(masses)
-    bounds = ((-12, 12), (-12, 12), (-3, 3))
-
-    print(f"Nombre de corps: {n_corps}")
-    print(f"Positions initiales - min: {points_init.min(axis=0)}, max: {points_init.max(axis=0)}")
+    bounds = ((-2, 2), (-2, 2), (-0.5, 0.5))
 
     try:
         from visualizer3d_sans_vbo import Visualizer3D
 
         visualizer = Visualizer3D(
-            points=points_init,
+            points=get_points(positions),
             colors=couleurs,
             luminosities=lum,
             bounds=bounds
         )
-        visualizer.camera_distance = 18
-
+        visualizer.camera_distance = 4
         frame_count = 0
         start_time = time.time()
 
@@ -162,27 +153,24 @@ def visualisation_vectorisee(n_etoiles=100, facteur_temps=500, dt_simulation=0.1
             dt_effectif = dt_simulation * facteur_temps
             positions, vitesses = mise_a_jour(positions, vitesses, masses, dt_effectif)
 
-            distances = np.linalg.norm(positions[1:], axis=1)
-            max_dist = np.max(distances)
-
             if frame_count % 60 == 0:
                 elapsed = time.time() - start_time
-                print(f"Frame {frame_count} | Temps écoulé: {elapsed:.1f}s | "
-                      f"Max distance: {max_dist:.2f} ly | "
-                      f"Étoile 1: ({positions[1,0]:.2f}, {positions[1,1]:.2f}, {positions[1,2]:.2f})")
+                distances = np.linalg.norm(positions[1:], axis=1)
+                print(f"Frame {frame_count} | Temps: {elapsed:.1f}s | "
+                      f"Max dist: {distances.max():.4f} ly")
 
-            return (get_points(positions), get_couleurs(couleurs), get_luminosites(masses))
+            return get_points(positions), get_couleurs(couleurs), get_luminosites(masses)
 
-        print(f"\n🎮 Visualisation avec version vectorisée")
-        print(f"   Facteur de temps: {facteur_temps}x")
-        print(f"   Pas de temps effectif: {dt_simulation * facteur_temps:.2f} ans")
-        print("   Appuyez sur ESC pour quitter\n")
+        print(f"\n{'='*60}")
+        print(f"VISUALISATION V2 — {n_corps} corps | Facteur: {facteur_temps}x")
+        print(f"Pas effectif: {dt_simulation * facteur_temps:.4f} ans")
+        print(f"Appuyez sur ESC pour quitter")
+        print(f"{'='*60}\n")
 
         visualizer.run_with_updater(updater, dt=0.016)
 
     except ImportError as e:
-        print(f"Erreur: module visualizer3d_sans_vbo non trouvé")
-        print(f"Erreur détaillée: {e}")
+        print(f"Erreur: {e}")
     except Exception as e:
         print(f"Erreur de visualisation: {e}")
         import traceback

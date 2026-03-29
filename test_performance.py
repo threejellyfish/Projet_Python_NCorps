@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import signal
 
 # --- IMPORTS ---
-from Corps import NCorps as NCorpsNaive, Corps as CorpsNaive
+from Corps_accel import NCorps as NCorpsNaive, Corps as CorpsNaive
 from Corps_vectorise import mise_a_jour as mise_a_jour_vectorisee
 from Corps_numba import _calcul_accelerations_numba_parallel as numba_parallel_accel
 from Corps_BarnesHut import BarnesHutSim
@@ -62,14 +62,14 @@ def benchmark():
                 signal.alarm(0)
 
         # --- NAIVE ---
-        def run_naive():
-            galaxy = NCorpsNaive()
-            for i in range(len(masses)):
-                galaxy.add(CorpsNaive(mass=masses[i], position=pos[i], speed=vel[i]))
-            start = time.time()
-            for _ in range(iterations):
-                galaxy.update(dt)
-            return (time.time() - start) / iterations
+        #def run_naive():
+        #    galaxy = NCorpsNaive()
+        #    for i in range(len(masses)):
+        #        galaxy.add(CorpsNaive(mass=masses[i], position=pos[i], speed=vel[i]))
+        #    start = time.time()
+        #    for _ in range(iterations):
+        #        galaxy.update(dt)
+        #   return (time.time() - start) / iterations
 
         results['Naïve (Objet)'].append(run_with_timeout(run_naive) if n <= 1000 else None)
 

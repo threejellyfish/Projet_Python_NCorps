@@ -72,14 +72,14 @@ class NCorps:
     def __init__(self, collection=None):
         self.collection = collection if collection is not None else []
         self.len = len(self.collection)
-        self.grid_pos = np.zeros((self.len, 2))
+        self.grid = np.zeros((self.len, 2))
         self.gravity_centers = np.zeros((20, 20, 3), dtype=np.float32)
     
     def add(self, corps): 
         self.collection.append(corps)
         self.len += 1
         self.grid = np.concatenate((self.grid, np.expand_dims(corps.grid_pos, axis=0)))
-        
+
     def calculate_accelerations(self):
         """Calcule l'accélération pour chaque corps due à l'attraction gravitationnelle"""
         n = self.len
