@@ -17,52 +17,40 @@ class GalaxieNumba:
     """
     
     def __init__(self, n_corps):
-        """
-        Initialise une galaxie avec n_corps corps
-        
-        Args:
-            n_corps (int): Nombre total de corps (étoiles + trou noir)
-        """
         self.n = n_corps
-        
-        # Tableaux pour stocker toutes les données
         self.positions = np.zeros((n_corps, 3), dtype=np.float64)
         self.vitesses = np.zeros((n_corps, 3), dtype=np.float64)
         self.masses = np.zeros(n_corps, dtype=np.float64)
         self.couleurs = np.zeros((n_corps, 3), dtype=np.float32)
-        
         self.trou_noir_idx = 0
     
-    def ajouter_trou_noir(self, masse, position, vitesse=np.zeros(3)):
-        """Ajoute le trou noir central"""
+    def ajouter_trou_noir(self, masse, position, vitesse=None):
+        if vitesse is None:
+            vitesse = np.zeros(3)
         self.masses[self.trou_noir_idx] = masse
         self.positions[self.trou_noir_idx] = position
         self.vitesses[self.trou_noir_idx] = vitesse
-        self.couleurs[self.trou_noir_idx] = [0, 0, 0]
+        self.couleurs[self.trou_noir_idx] = np.array([0, 0, 0], dtype=np.float32)
     
-    def ajouter_etoile(self, idx, masse, position, vitesse=np.zeros(3)):
-        """Ajoute une étoile"""
+    def ajouter_etoile(self, idx, masse, position, vitesse=None):
+        if vitesse is None:
+            vitesse = np.zeros(3)
         self.masses[idx] = masse
         self.positions[idx] = position
         self.vitesses[idx] = vitesse
         self.couleurs[idx] = self._couleur_selon_masse(masse)
     
     def _couleur_selon_masse(self, masse):
-        """Détermine la couleur selon la masse"""
         if masse > 5:
             return np.array([150, 180, 255], dtype=np.float32)
         elif masse > 2:
             return np.array([255, 255, 255], dtype=np.float32)
-        elif masse > 1:
+        elif masse >= 1:  # CORRECTION : >= au lieu de >
             return np.array([255, 255, 200], dtype=np.float32)
         else:
             return np.array([250, 150, 100], dtype=np.float32)
     
     def calculer_accelerations_python(self):
-        """
-        Version pure Python (sans optimisation)
-        Pour comparer avec Numba
-        """
         n = self.n
         accelerations = np.zeros((n, 3), dtype=np.float64)
         
@@ -72,11 +60,8 @@ class GalaxieNumba:
                     dx = self.positions[j, 0] - self.positions[i, 0]
                     dy = self.positions[j, 1] - self.positions[i, 1]
                     dz = self.positions[j, 2] - self.positions[i, 2]
-                    
                     r = np.sqrt(dx*dx + dy*dy + dz*dz) + 1e-10
-                    
                     facteur = G * self.masses[j] / (r * r * r)
-                    
                     accelerations[i, 0] += facteur * dx
                     accelerations[i, 1] += facteur * dy
                     accelerations[i, 2] += facteur * dz
@@ -84,31 +69,16 @@ class GalaxieNumba:
         return accelerations
     
     def calculer_accelerations_numba_serial(self):
-        """
-        Version optimisée avec Numba (exécution séquentielle)
-        Utilise @njit pour compiler la fonction
-        """
         return _calcul_accelerations_numba_serial(
             self.positions, self.masses, G, self.n
         )
     
     def calculer_accelerations_numba_parallel(self):
-        """
-        Version optimisée avec Numba (parallélisée)
-        Utilise @njit(parallel=True) et prange
-        """
         return _calcul_accelerations_numba_parallel(
             self.positions, self.masses, G, self.n
         )
     
     def update(self, dt, mode='numba_parallel'):
-        """
-        Met à jour positions et vitesses
-        
-        Args:
-            dt: pas de temps
-            mode: 'python', 'numba_serial', ou 'numba_parallel'
-        """
         if mode == 'python':
             accelerations = self.calculer_accelerations_python()
         elif mode == 'numba_serial':
@@ -116,9 +86,9 @@ class GalaxieNumba:
         else:  # numba_parallel
             accelerations = self.calculer_accelerations_numba_parallel()
         
-        # Mise à jour (vectorisée)
-        self.vitesses += accelerations * dt
+        # CORRECTION : positions mises à jour avec v(t) AVANT de modifier les vitesses
         self.positions += self.vitesses * dt + 0.5 * accelerations * dt**2
+        self.vitesses  += accelerations * dt
     
     def get_points(self):
         return self.positions.astype(np.float32)
@@ -140,11 +110,8 @@ class GalaxieNumba:
 # FONCTIONS OPTIMISÉES AVEC NUMBA (EN DEHORS DE LA CLASSE)
 # ============================================================
 
-@njit  # Compilation JIT sans parallélisation
+@njit
 def _calcul_accelerations_numba_serial(positions, masses, G, n):
-    """
-    Calcul des accélérations avec Numba (séquentiel)
-    """
     accelerations = np.zeros((n, 3), dtype=np.float64)
     
     for i in range(n):
@@ -154,13 +121,8 @@ def _calcul_accelerations_numba_serial(positions, masses, G, n):
                 dx = positions[j, 0] - positions[i, 0]
                 dy = positions[j, 1] - positions[i, 1]
                 dz = positions[j, 2] - positions[i, 2]
-                
-                # Éviter la division par zéro
                 r = np.sqrt(dx*dx + dy*dy + dz*dz) + 1e-10
-                
-                # Facteur = G * m_j / r^3
                 facteur = G * masses[j] / (r * r * r)
-                
                 ax += facteur * dx
                 ay += facteur * dy
                 az += facteur * dz
@@ -172,15 +134,10 @@ def _calcul_accelerations_numba_serial(positions, masses, G, n):
     return accelerations
 
 
-@njit(parallel=True)  # Compilation avec parallélisation
+@njit(parallel=True)
 def _calcul_accelerations_numba_parallel(positions, masses, G, n):
-    """
-    Calcul des accélérations avec Numba (parallélisé)
-    Utilise prange pour distribuer les itérations sur les cœurs CPU
-    """
     accelerations = np.zeros((n, 3), dtype=np.float64)
     
-    # parallel=True + prange = parallélisation automatique
     for i in prange(n):
         ax = ay = az = 0.0
         for j in range(n):
@@ -188,11 +145,8 @@ def _calcul_accelerations_numba_parallel(positions, masses, G, n):
                 dx = positions[j, 0] - positions[i, 0]
                 dy = positions[j, 1] - positions[i, 1]
                 dz = positions[j, 2] - positions[i, 2]
-                
                 r = np.sqrt(dx*dx + dy*dy + dz*dz) + 1e-10
-                
                 facteur = G * masses[j] / (r * r * r)
-                
                 ax += facteur * dx
                 ay += facteur * dy
                 az += facteur * dz
@@ -208,67 +162,83 @@ def _calcul_accelerations_numba_parallel(positions, masses, G, n):
 # FONCTIONS DE TEST ET BENCHMARK
 # ============================================================
 
-def benchmark_numba(n_etoiles=100, n_iterations=20, dt=0.01):
-    """
-    Compare les performances des différentes versions
-    """
-    import multiprocessing
-    n_coeurs = multiprocessing.cpu_count()
-    
-    print("\n" + "="*70)
-    print(f"BENCHMARK NUMBA - {n_etoiles} étoiles, {n_iterations} itérations")
-    print(f"Plateforme: {n_coeurs} cœurs CPU disponibles")
-    print("="*70)
-    
+def creer_galaxie_test(n_etoiles):
     n_corps = n_etoiles + 1
     galaxie = GalaxieNumba(n_corps)
-    
-    # Initialisation
     galaxie.ajouter_trou_noir(1e6, np.zeros(3))
+    
     for i in range(1, n_corps):
-        r = np.random.uniform(1, 5)
+        r = np.random.uniform(2, 6)
         theta = np.random.uniform(0, 2*np.pi)
-        pos = np.array([r*np.cos(theta), r*np.sin(theta), 0])
+        pos = np.array([
+            r * np.cos(theta),
+            r * np.sin(theta),
+            np.random.uniform(-0.3, 0.3)
+        ])
+        v = np.sqrt(G * 1e6 / r)
+        vitesse = np.array([
+            -v * np.sin(theta),
+            v * np.cos(theta),
+            0
+        ])
         masse = np.random.uniform(0.5, 10)
-        galaxie.ajouter_etoile(i, masse, pos)
+        galaxie.ajouter_etoile(i, masse, pos, vitesse)
+    
+    return galaxie
+
+
+def benchmark_numba(n_etoiles=100, n_iterations=30, dt=0.01):
+    import multiprocessing
+    
+    n_coeurs = multiprocessing.cpu_count()
+    # CORRECTION : gestion propre de l'import psutil
+    try:
+        import psutil
+        n_coeurs_logiques = psutil.cpu_count(logical=True)
+    except ImportError:
+        n_coeurs_logiques = n_coeurs
+    
+    print("\n" + "="*80)
+    print(f"BENCHMARK NUMBA - {n_etoiles} étoiles, {n_iterations} itérations")
+    print(f"Plateforme: {n_coeurs} cœurs physiques, {n_coeurs_logiques} cœurs logiques")
+    print("="*80)
     
     # 1. Version pure Python
     print("\n🔵 Version pure Python...")
+    galaxie_py = creer_galaxie_test(n_etoiles)
     start = time.time()
     for _ in range(n_iterations):
-        galaxie.update(dt, mode='python')
+        galaxie_py.update(dt, mode='python')
     t_python = time.time() - start
     print(f"   Temps: {t_python:.4f} s")
     
     # 2. Version Numba séquentielle
     print("\n🟢 Version Numba (séquentielle)...")
-    # Première exécution (compilation)
-    galaxie.update(dt, mode='numba_serial')
-    
+    galaxie_ns = creer_galaxie_test(n_etoiles)
+    galaxie_ns.update(dt, mode='numba_serial')  # Warmup JIT
     start = time.time()
     for _ in range(n_iterations):
-        galaxie.update(dt, mode='numba_serial')
+        galaxie_ns.update(dt, mode='numba_serial')
     t_numba_serial = time.time() - start
     print(f"   Temps: {t_numba_serial:.4f} s")
     
     # 3. Version Numba parallèle
     print("\n🟠 Version Numba (parallèle)...")
-    # Première exécution (compilation)
-    galaxie.update(dt, mode='numba_parallel')
-    
+    galaxie_np = creer_galaxie_test(n_etoiles)
+    galaxie_np.update(dt, mode='numba_parallel')  # Warmup JIT
     start = time.time()
     for _ in range(n_iterations):
-        galaxie.update(dt, mode='numba_parallel')
+        galaxie_np.update(dt, mode='numba_parallel')
     t_numba_parallel = time.time() - start
     print(f"   Temps: {t_numba_parallel:.4f} s")
     
-    # Calcul des accélérations
-    print("\n" + "-"*50)
+    print("\n" + "-"*80)
     print("RÉSULTATS:")
-    print(f"  • Python vs Numba serial: {t_python/t_numba_serial:.2f}x plus rapide")
-    print(f"  • Python vs Numba parallel: {t_python/t_numba_parallel:.2f}x plus rapide")
-    print(f"  • Numba parallel vs serial: {t_numba_serial/t_numba_parallel:.2f}x (gain parallélisation)")
-    print(f"  • Efficacité parallèle: {t_numba_serial/t_numba_parallel/n_coeurs*100:.1f}%")
+    print(f"  • Python vs Numba serial:     {t_python/t_numba_serial:6.2f}x plus rapide")
+    print(f"  • Python vs Numba parallel:   {t_python/t_numba_parallel:6.2f}x plus rapide")
+    print(f"  • Numba parallel vs serial:   {t_numba_serial/t_numba_parallel:6.2f}x (gain parallélisation)")
+    print(f"  • Efficacité parallèle:       {t_numba_serial/t_numba_parallel/n_coeurs*100:5.1f}%")
+    print("="*80)
     
     return {
         'python': t_python,
@@ -279,47 +249,32 @@ def benchmark_numba(n_etoiles=100, n_iterations=20, dt=0.01):
 
 
 def benchmark_multi_taille():
-    """
-    Teste différentes tailles de galaxies
-    """
     tailles = [50, 100, 200, 300, 400, 500]
     resultats = []
     
-    print("\n" + "="*70)
+    print("\n" + "="*90)
     print("BENCHMARK MULTI-TAILLES AVEC NUMBA")
-    print("="*70)
-    print(f"{'Étoiles':>8} | {'Python (s)':>12} | {'Numba S (s)':>12} | {'Numba P (s)':>12} | {'Accélération':>12}")
-    print("-"*70)
+    print("="*90)
+    print(f"{'Étoiles':>8} | {'Python (s)':>12} | {'Numba S (s)':>12} | {'Numba P (s)':>12} | {'Accélération':>12} | {'Gain parallèle':>12}")
+    print("-"*90)
     
     for n in tailles:
-        print(f"Test avec {n} étoiles...", end='', flush=True)
+        print(f"Test avec {n:3d} étoiles...", end='', flush=True)
         
-        # Création de la galaxie
-        n_corps = n + 1
-        galaxie = GalaxieNumba(n_corps)
-        
-        galaxie.ajouter_trou_noir(1e6, np.zeros(3))
-        for i in range(1, n_corps):
-            r = np.random.uniform(1, 5)
-            theta = np.random.uniform(0, 2*np.pi)
-            pos = np.array([r*np.cos(theta), r*np.sin(theta), 0])
-            masse = np.random.uniform(0.5, 10)
-            galaxie.ajouter_etoile(i, masse, pos)
-        
-        # Benchmark Python
+        galaxie = creer_galaxie_test(n)
         start = time.time()
         for _ in range(10):
             galaxie.update(0.01, mode='python')
         t_py = time.time() - start
         
-        # Benchmark Numba serial
+        galaxie = creer_galaxie_test(n)
         galaxie.update(0.01, mode='numba_serial')  # Warmup
         start = time.time()
         for _ in range(10):
             galaxie.update(0.01, mode='numba_serial')
         t_ns = time.time() - start
         
-        # Benchmark Numba parallel
+        galaxie = creer_galaxie_test(n)
         galaxie.update(0.01, mode='numba_parallel')  # Warmup
         start = time.time()
         for _ in range(10):
@@ -327,51 +282,45 @@ def benchmark_multi_taille():
         t_np = time.time() - start
         
         accel = t_py / t_np
+        gain_par = t_ns / t_np
         
-        print(f"\r{n:8d} | {t_py:12.4f} | {t_ns:12.4f} | {t_np:12.4f} | {accel:12.2f}x")
-        resultats.append((n, t_py, t_ns, t_np, accel))
+        print(f"\r{n:8d} | {t_py:12.4f} | {t_ns:12.4f} | {t_np:12.4f} | {accel:12.2f}x | {gain_par:12.2f}x")
+        resultats.append((n, t_py, t_ns, t_np, accel, gain_par))
+    
+    print("="*90)
+    print("\n📊 ANALYSE:")
+    print("   - L'accélération augmente avec le nombre d'étoiles")
+    print("   - Le gain de la parallélisation est limité par les cœurs disponibles")
+    print("   - Numba est particulièrement efficace pour les grands N")
     
     return resultats
 
 
-def visualisation_numba():
-    """
-    Lance la visualisation avec la version Numba
-    """
-    import os
-    
-    n_etoiles = 50  # Plus petit pour commencer
+def visualisation_numba(n_etoiles=200, facteur_temps=200):
     n_corps = n_etoiles + 1
     galaxie = GalaxieNumba(n_corps)
-    
-    # Création d'une galaxie
     galaxie.ajouter_trou_noir(1e6, np.zeros(3))
     
-    print("Création des étoiles...")
+    print(f"Création de {n_etoiles} étoiles...")
     for i in range(1, n_corps):
-        r = np.random.uniform(2, 5)
+        r = np.random.uniform(2, 8)
         theta = np.random.uniform(0, 2*np.pi)
-        
         pos = np.array([
             r * np.cos(theta),
             r * np.sin(theta),
             np.random.uniform(-0.5, 0.5)
         ])
-        
-        # Vitesse orbitale pour que ça tourne
-        v = np.sqrt(G * 1e6 / r) * 0.5  # Facteur 0.5 pour ralentir un peu
+        v = np.sqrt(G * 1e6 / r)
         vitesse = np.array([
             -v * np.sin(theta),
             v * np.cos(theta),
             0
         ])
-        
         masse = np.random.uniform(0.5, 10)
         galaxie.ajouter_etoile(i, masse, pos, vitesse)
     
     print("Préparation de la visualisation...")
     
-    # Visualisation
     try:
         from visualizer3d_sans_vbo import Visualizer3D
         
@@ -382,40 +331,46 @@ def visualisation_numba():
             points=points_init,
             colors=galaxie.get_couleurs(),
             luminosities=galaxie.get_luminosites(),
-            bounds=((-8, 8), (-8, 8), (-2, 2))
+            bounds=((-12, 12), (-12, 12), (-3, 3))
         )
         
-        visualizer.camera_distance = 15
-        
-        # Compteur pour le débogage
+        visualizer.camera_distance = 18
         frame_count = 0
+        start_time = time.time()
         
-        def updater_numba(dt):
-            nonlocal frame_count
+        def updater_numba(dt_visu):
+            nonlocal frame_count, start_time
             frame_count += 1
-            
-            # Met à jour la galaxie
-            galaxie.update(dt, mode='numba_parallel')
-            
-            # Récupère les nouvelles positions
+            dt_effectif = 0.1 * facteur_temps
+            galaxie.update(dt_effectif, mode='numba_parallel')
             points = galaxie.get_points()
             couleurs = galaxie.get_couleurs()
             luminosites = galaxie.get_luminosites()
             
-            # Affiche toutes les 30 frames
-            if frame_count % 30 == 0:
-                print(f"Frame {frame_count}: un point à {points[1, 0]:.2f}, {points[1, 1]:.2f}, {points[1, 2]:.2f}")
+            if frame_count % 60 == 0:
+                elapsed = time.time() - start_time
+                distances = np.linalg.norm(points[1:], axis=1)
+                print(f"Frame {frame_count:4d} | Temps réel: {elapsed:5.1f}s | "
+                      f"Max distance: {distances.max():6.2f} ly | "
+                      f"Étoile 1: ({points[1,0]:6.2f}, {points[1,1]:6.2f}, {points[1,2]:6.2f})")
             
             return points, couleurs, luminosites
         
-        print("\n🎮 Visualisation avec Numba - Appuyez sur ECHAP pour quitter")
-        print(f"   {n_etoiles} étoiles, calcul parallélisé")
-        print("   Les étoiles DEVRAIENT bouger...")
+        print("\n" + "="*60)
+        print("🎮 VISUALISATION AVEC NUMBA")
+        print("="*60)
+        print(f"   {n_etoiles} étoiles | Facteur temps: {facteur_temps}x")
+        print(f"   Mode: Parallélisé sur tous les cœurs disponibles")
+        print("   Appuyez sur ECHAP pour quitter")
+        print("="*60 + "\n")
         
-        visualizer.run_with_updater(updater_numba, dt=0.05)  # dt plus grand
+        visualizer.run_with_updater(updater_numba, dt=0.016)
         
+    except ImportError:
+        print("Erreur: module visualizer3d_sans_vbo non trouvé")
+        print("Vérifiez que le fichier est dans le même dossier")
     except Exception as e:
-        print(f"Erreur: {e}")
+        print(f"Erreur de visualisation: {e}")
         import traceback
         traceback.print_exc()
 
@@ -425,25 +380,26 @@ if __name__ == "__main__":
     
     if len(sys.argv) > 1:
         if sys.argv[1] == "--benchmark":
-            # Benchmark simple
             n = int(sys.argv[2]) if len(sys.argv) > 2 else 100
             benchmark_numba(n_etoiles=n, n_iterations=30)
         
         elif sys.argv[1] == "--multi":
-            # Benchmark multi-tailles
             benchmark_multi_taille()
         
         elif sys.argv[1] == "--visualize":
-            # Visualisation
-            visualisation_numba()
+            n = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+            facteur = int(sys.argv[3]) if len(sys.argv) > 3 else 200
+            visualisation_numba(n_etoiles=n, facteur_temps=facteur)
         
         else:
             print("Usage:")
             print("  python3 Corps_numba.py --benchmark [n_etoiles]")
             print("  python3 Corps_numba.py --multi")
-            print("  python3 Corps_numba.py --visualize")
+            print("  python3 Corps_numba.py --visualize [n_etoiles] [facteur_temps]")
+            print("\nExemples:")
+            print("  python3 Corps_numba.py --visualize 200 200")
+            print("  python3 Corps_numba.py --benchmark 500")
+    
     else:
-        # Test rapide
-        print("Test rapide de Numba...")
-        res = benchmark_numba(n_etoiles=50, n_iterations=10)
-        print("\nTest terminé!")
+        print("Test rapide avec 100 étoiles...")
+        benchmark_numba(n_etoiles=100, n_iterations=20)
