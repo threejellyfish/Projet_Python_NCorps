@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import signal
 
 # --- IMPORTS ---
-#from Corps_accel import NCorps as NCorpsNaive, Corps as CorpsNaive
 from Corps_vectorise import mise_a_jour as mise_a_jour_vectorisee
 from Corps_numba import _calcul_accelerations_numba_parallel as numba_parallel_accel
 from Corps_BarnesHut import BarnesHutSim
@@ -61,17 +60,6 @@ def benchmark():
             finally:
                 signal.alarm(0)
 
-        # --- NAIVE ---
-        #def run_naive():
-        #    galaxy = NCorpsNaive()
-        #    for i in range(len(masses)):
-        #        galaxy.add(CorpsNaive(mass=masses[i], position=pos[i], speed=vel[i]))
-        #    start = time.time()
-        #    for _ in range(iterations):
-        #        galaxy.update(dt)
-        #   return (time.time() - start) / iterations
-
-        #results['Naïve (Objet)'].append(run_with_timeout(run_naive) if n <= 1000 else None)
 
         # --- GRID ---
         def run_grid():
@@ -83,6 +71,8 @@ def benchmark():
 
         results['Grille (Grid)'].append(run_with_timeout(run_grid) if n <= 1000 else None)
 
+        print("Hi")
+
         # --- VECTORISE ---
         def run_vect():
             p_v, v_v = pos.copy(), vel.copy()
@@ -92,7 +82,8 @@ def benchmark():
                 p_v, v_v = mise_a_jour_vectorisee(p_v, v_v, masses, dt)
             return (time.time() - start) / iterations
 
-        results['Vectorisée'].append(run_with_timeout(run_vect) if n <= 1000 else None)
+        results['Vectorisée'].append(run_with_timeout(run_vect) if n <= 10000 else None)
+        print("Hi2")
 
         # --- NUMBA ---
         def run_numba():
@@ -101,11 +92,12 @@ def benchmark():
             start = time.time()
             for _ in range(iterations):
                 acc = numba_parallel_accel(p_n, masses, G, len(masses))
-                v_n += acc * dt + 0.5*acc*dt**2
-                p_n += v_n * dt
+                p_n += v_n * dt + 0.5*acc*dt**2
+                v_n += acc * dt 
             return (time.time() - start) / iterations
 
-        results['Numba Parallel'].append(run_with_timeout(run_numba) if n <= 1000 else None)
+        results['Numba Parallel'].append(run_with_timeout(run_numba) if n <= 10000 else None)
+        print("Hi3")
 
         # --- BARNES-HUT ---
         def run_bh():
@@ -117,6 +109,7 @@ def benchmark():
             return (time.time() - start) / iterations
 
         results['Barnes-Hut'].append(run_with_timeout(run_bh))
+        print("Hi4")
 
     # --- SAVE CSV ---
     import csv
