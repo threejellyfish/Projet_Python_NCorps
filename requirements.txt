@@ -1,0 +1,5 @@
+numpy
+numba
+PyOpenGL
+PyOpenGL_accelerate
+matplotlib
